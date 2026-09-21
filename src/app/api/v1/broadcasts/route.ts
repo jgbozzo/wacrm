@@ -19,7 +19,8 @@
 //
 // Response (202):
 //   { "data": { "broadcast_id", "status": "sending",
-//               "total_recipients", "accepted", "rejected" } }
+//               "total_recipients", "accepted", "rejected",
+//               "rejected_invalid", "rejected_no_consent" } }
 // ============================================================
 
 import { after } from 'next/server';
@@ -86,6 +87,8 @@ export async function POST(request: Request) {
         total_recipients: plan.planned.length,
         accepted: plan.planned.length,
         rejected: plan.rejected,
+        rejected_invalid: plan.rejectedInvalid,
+        rejected_no_consent: plan.rejectedNoConsent,
       },
       202
     );
