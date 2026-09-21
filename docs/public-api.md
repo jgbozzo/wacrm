@@ -278,7 +278,16 @@ curl -X POST https://your-crm.example.com/api/v1/broadcasts \
 ```
 
 Recipients are capped at **1000 per request** — split larger sends.
-Invalid phone numbers are dropped and counted as `rejected`. Response
+
+A recipient is eligible only when:
+
+- the phone number is valid E.164,
+- the phone resolves to an existing contact in the same account, and
+- that contact has a current explicit WhatsApp opt-in.
+
+The endpoint no longer auto-creates contacts from a raw broadcast list:
+contact existence is not treated as consent. Invalid phones and
+missing/withdrawn consent are rejected before any Meta call. Response
 (202):
 
 ```json
@@ -288,7 +297,9 @@ Invalid phone numbers are dropped and counted as `rejected`. Response
     "status": "sending",
     "total_recipients": 2,
     "accepted": 2,
-    "rejected": 0
+    "rejected": 0,
+    "rejected_invalid": 0,
+    "rejected_no_consent": 0
   }
 }
 ```
