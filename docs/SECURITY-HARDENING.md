@@ -108,8 +108,8 @@ This version must be reviewed against Meta's current supported versions before c
 
 ## Planned implementation order
 
-1. Add consent fields in a new Supabase migration.
-2. Add contact-level opt-in/opt-out read/write support.
+1. ✅ Add consent fields in a new Supabase migration.
+2. ✅ Add contact-level opt-in/opt-out read/write support.
 3. Enforce consent in broadcast creation.
 4. Add service-window enforcement in the shared send core.
 5. Review all `/api/v1` endpoints for explicit account scoping.
@@ -124,6 +124,10 @@ This version must be reviewed against Meta's current supported versions before c
 ### 2026-09-21
 
 - Created this hardening plan.
-- No functional behavior changed.
-- No database schema changed.
-- No messaging behavior changed.
+- Added `supabase/migrations/041_whatsapp_consent.sql`.
+- Existing contacts default to `whatsapp_opt_in = false`; contact existence/import never implies consent.
+- Added public API read/write support for opt-in/opt-out.
+- Opt-in requires an explicit source and receives a server-side timestamp.
+- Opt-out receives a server-side timestamp while prior opt-in metadata is retained as audit history.
+- Added consent fields to the shared `Contact` type and public API documentation.
+- Broadcast and message-send enforcement are still pending; no messaging behavior has changed yet.
