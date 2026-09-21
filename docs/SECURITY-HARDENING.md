@@ -110,7 +110,7 @@ This version must be reviewed against Meta's current supported versions before c
 
 1. ✅ Add consent fields in a new Supabase migration.
 2. ✅ Add contact-level opt-in/opt-out read/write support.
-3. Enforce consent in broadcast creation.
+3. ✅ Enforce consent in broadcast creation and resume paths.
 4. Add service-window enforcement in the shared send core.
 5. Review all `/api/v1` endpoints for explicit account scoping.
 6. Review MCP/n8n permissions and least-privilege defaults.
@@ -130,4 +130,10 @@ This version must be reviewed against Meta's current supported versions before c
 - Opt-in requires an explicit source and receives a server-side timestamp.
 - Opt-out receives a server-side timestamp while prior opt-in metadata is retained as audit history.
 - Added consent fields to the shared `Contact` type and public API documentation.
-- Broadcast and message-send enforcement are still pending; no messaging behavior has changed yet.
+- Broadcast enforcement is now active in both the public API and dashboard send paths.
+- Broadcast recipients must resolve to an existing same-account contact with a current explicit opt-in.
+- Raw broadcast phone lists no longer auto-create contacts.
+- Resume/retry re-checks consent so a later opt-out cannot be bypassed.
+- Public API responses now distinguish invalid-number rejections from missing/withdrawn-consent rejections.
+- Added unit coverage for consent validation.
+- Service-window enforcement for non-template sends is still pending.
