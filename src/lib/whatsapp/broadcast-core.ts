@@ -28,7 +28,8 @@ import {
 } from '@/lib/whatsapp/phone-utils';
 import { resolveTemplateRow } from '@/lib/whatsapp/template-body';
 import type { MessageTemplate } from '@/types';
-import { findOrCreateContact } from '@/lib/api/v1/contacts';
+import { findExistingContact } from '@/lib/contacts/dedupe';
+import { hasValidWhatsAppOptIn } from '@/lib/whatsapp/consent';
 
 /** Thrown by createBroadcast on a caller-visible failure; route maps it. */
 export class BroadcastError extends Error {
@@ -70,8 +71,12 @@ export interface BroadcastPlan {
   accessToken: string;
   templateRow: MessageTemplate | null;
   planned: PlannedRecipient[];
-  /** Phones rejected up front (invalid E.164) — counted as failed. */
+  /** Total recipients rejected before any Meta call. */
   rejected: number;
+  /** Rejected because the phone number was invalid. */
+  rejectedInvalid: number;
+  /** Rejected because no current explicit WhatsApp opt-in was recorded. */
+  rejectedNoConsent: number;
 }
 
 const MAX_RECIPIENTS = 1000;
@@ -141,27 +146,38 @@ export async function createBroadcast(
   }
   const templateRow = resolvedTemplate.row;
 
-  // Resolve each recipient to a contact. Invalid phones are dropped
-  // (counted as rejected) rather than aborting the whole broadcast.
+  // Resolve each recipient to an EXISTING contact with a current explicit
+  // WhatsApp opt-in. A raw phone list is not enough proof of consent, so
+  // this path deliberately does NOT auto-create contacts anymore.
+  //
+  // Invalid phones and missing/withdrawn consent are rejected before any
+  // broadcast rows are persisted or any Meta call is made.
   const resolved: { contactId: string; phone: string; params: string[] }[] = [];
-  let rejected = 0;
+  let rejectedInvalid = 0;
+  let rejectedNoConsent = 0;
   for (const r of recipients) {
     const sanitized = sanitizePhoneForMeta(typeof r.to === 'string' ? r.to : '');
     if (!isValidE164(sanitized)) {
-      rejected++;
+      rejectedInvalid++;
       continue;
     }
-    const { id } = await findOrCreateContact(db, accountId, auditUserId, {
-      phone: sanitized,
-    });
+
+    const contact = await findExistingContact(db, accountId, sanitized);
+    if (!contact || !hasValidWhatsAppOptIn(contact)) {
+      rejectedNoConsent++;
+      continue;
+    }
+
     resolved.push({
-      contactId: id,
+      contactId: contact.id,
       phone: sanitized,
       params: Array.isArray(r.params)
         ? r.params.filter((p): p is string => typeof p === 'string')
         : [],
     });
   }
+
+  const rejected = rejectedInvalid + rejectedNoConsent;
 
   // Collapse recipients that resolved to the SAME contact (the caller
   // listed a phone twice, or two numbers fuzzy-matched to one contact).
@@ -178,7 +194,9 @@ export async function createBroadcast(
   if (deduped.length === 0) {
     throw new BroadcastError(
       'bad_request',
-      'No recipients had a valid E.164 phone number',
+      rejectedNoConsent > 0 && rejectedInvalid === 0
+        ? 'No recipients had a current recorded WhatsApp opt-in'
+        : 'No recipients were eligible: check phone numbers and recorded WhatsApp opt-in',
       400
     );
   }
@@ -239,6 +257,8 @@ export async function createBroadcast(
     templateRow,
     planned,
     rejected,
+    rejectedInvalid,
+    rejectedNoConsent,
   };
 }
 
