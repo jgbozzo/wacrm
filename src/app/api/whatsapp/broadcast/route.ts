@@ -10,6 +10,8 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
+import { findExistingContact } from '@/lib/contacts/dedupe'
+import { hasValidWhatsAppOptIn } from '@/lib/whatsapp/consent'
 import {
   checkRateLimit,
   rateLimitResponse,
@@ -172,6 +174,20 @@ export async function POST(request: Request) {
           phone: recipient.phone,
           status: 'failed',
           error: 'Invalid phone number format',
+        })
+        failedCount++
+        continue
+      }
+
+      // A phone number alone is not proof of consent. Dashboard sends
+      // must resolve to an existing contact with a current explicit
+      // WhatsApp opt-in before any Meta call is attempted.
+      const contact = await findExistingContact(supabase, accountId, sanitized)
+      if (!contact || !hasValidWhatsAppOptIn(contact)) {
+        results.push({
+          phone: recipient.phone,
+          status: 'failed',
+          error: 'WhatsApp opt-in not recorded or no longer valid',
         })
         failedCount++
         continue
