@@ -4,7 +4,7 @@
 // Kept out of the route files so `GET/POST /api/v1/contacts` and
 // `GET/PATCH /api/v1/contacts/{id}` share one serializer, one
 // find-or-create (built on the same `findExistingContact` dedupe the
-// webhook and send path use), and one tag-sync routine.
+// webhook and send path use), consent handling, and one tag-sync routine.
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -24,6 +24,11 @@ export interface ApiContact {
   email: string | null;
   company: string | null;
   avatar_url: string | null;
+  whatsapp_opt_in: boolean;
+  whatsapp_opt_in_at: string | null;
+  whatsapp_opt_in_source: string | null;
+  whatsapp_opt_in_evidence: string | null;
+  whatsapp_opt_out_at: string | null;
   tags: { id: string; name: string; color: string }[];
   created_at: string;
   updated_at: string;
@@ -51,6 +56,13 @@ export function serializeContact(row: Record<string, unknown>): ApiContact {
     email: (row.email as string | null) ?? null,
     company: (row.company as string | null) ?? null,
     avatar_url: (row.avatar_url as string | null) ?? null,
+    whatsapp_opt_in: row.whatsapp_opt_in === true,
+    whatsapp_opt_in_at: (row.whatsapp_opt_in_at as string | null) ?? null,
+    whatsapp_opt_in_source:
+      (row.whatsapp_opt_in_source as string | null) ?? null,
+    whatsapp_opt_in_evidence:
+      (row.whatsapp_opt_in_evidence as string | null) ?? null,
+    whatsapp_opt_out_at: (row.whatsapp_opt_out_at as string | null) ?? null,
     tags: joins
       .map((j) => j.tags)
       .filter((t): t is NonNullable<RawTagJoin['tags']> => t != null)
@@ -99,6 +111,126 @@ export interface ContactInput {
   name?: string | null;
   email?: string | null;
   company?: string | null;
+}
+
+export interface WhatsAppConsentInput {
+  optedIn: boolean;
+  source?: string | null;
+  evidence?: string | null;
+}
+
+/**
+ * Parse the public API's consent fields.
+ *
+ * Consent is intentionally explicit: merely creating/importing a
+ * contact never opts that person in. To record an opt-in the caller
+ * must send `whatsapp_opt_in: true` AND a non-empty
+ * `whatsapp_opt_in_source`. The server timestamps the event so an
+ * arbitrary client cannot silently backdate consent.
+ *
+ * Sending `whatsapp_opt_in: false` records an opt-out now. Historical
+ * opt-in metadata is retained as an audit trail.
+ */
+export function parseWhatsAppConsentInput(
+  body: Record<string, unknown>
+): WhatsAppConsentInput | null {
+  const hasOptIn = 'whatsapp_opt_in' in body;
+  const hasSource = 'whatsapp_opt_in_source' in body;
+  const hasEvidence = 'whatsapp_opt_in_evidence' in body;
+
+  if (!hasOptIn) {
+    if (hasSource || hasEvidence) {
+      throw new ContactError(
+        "'whatsapp_opt_in_source'/'whatsapp_opt_in_evidence' require 'whatsapp_opt_in'",
+        400
+      );
+    }
+    return null;
+  }
+
+  if (typeof body.whatsapp_opt_in !== 'boolean') {
+    throw new ContactError("'whatsapp_opt_in' must be a boolean", 400);
+  }
+
+  const optedIn = body.whatsapp_opt_in;
+  const source =
+    typeof body.whatsapp_opt_in_source === 'string'
+      ? body.whatsapp_opt_in_source.trim()
+      : body.whatsapp_opt_in_source == null
+        ? null
+        : undefined;
+  const evidence =
+    typeof body.whatsapp_opt_in_evidence === 'string'
+      ? body.whatsapp_opt_in_evidence.trim()
+      : body.whatsapp_opt_in_evidence == null
+        ? null
+        : undefined;
+
+  if (source === undefined) {
+    throw new ContactError(
+      "'whatsapp_opt_in_source' must be a string or null",
+      400
+    );
+  }
+  if (evidence === undefined) {
+    throw new ContactError(
+      "'whatsapp_opt_in_evidence' must be a string or null",
+      400
+    );
+  }
+  if (optedIn && !source) {
+    throw new ContactError(
+      "'whatsapp_opt_in_source' is required when opting a contact in",
+      400
+    );
+  }
+
+  return { optedIn, source, evidence };
+}
+
+/**
+ * Record an explicit WhatsApp opt-in or opt-out for one contact.
+ *
+ * The update is account-scoped even when called with a service-role
+ * client. Opt-in timestamps are generated server-side. Opt-out retains
+ * the previous opt-in source/evidence/timestamp for audit history.
+ */
+export async function setWhatsAppConsent(
+  db: SupabaseClient,
+  accountId: string,
+  contactId: string,
+  input: WhatsAppConsentInput
+): Promise<void> {
+  const now = new Date().toISOString();
+  const updates: Record<string, unknown> = input.optedIn
+    ? {
+        whatsapp_opt_in: true,
+        whatsapp_opt_in_at: now,
+        whatsapp_opt_in_source: input.source,
+        whatsapp_opt_in_evidence: input.evidence ?? null,
+        updated_at: now,
+      }
+    : {
+        whatsapp_opt_in: false,
+        whatsapp_opt_out_at: now,
+        updated_at: now,
+      };
+
+  const { data, error } = await db
+    .from('contacts')
+    .update(updates)
+    .eq('id', contactId)
+    .eq('account_id', accountId)
+    .select('id')
+    .maybeSingle();
+
+  if (error) {
+    console.error('[api/v1/contacts] consent update error:', error);
+    throw new ContactError('Failed to update WhatsApp consent', 500);
+  }
+  if (!data) {
+    throw new ContactError('Contact not found', 404);
+  }
 }
 
 /**
