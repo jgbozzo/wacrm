@@ -14,7 +14,27 @@ import {
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { resolveContactSendTarget } from '@/lib/whatsapp/wa-identity'
+import { getCustomerServiceWindowStatus } from '@/lib/whatsapp/service-window'
 import { supabaseAdmin } from './admin-client'
+
+async function requireOpenServiceWindow(
+  db: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+  conversationId: string,
+): Promise<void> {
+  const status = await getCustomerServiceWindowStatus(
+    db,
+    accountId,
+    conversationId,
+  )
+  if (!status.open) {
+    throw new Error(
+      status.lastInboundAt
+        ? 'WhatsApp 24-hour customer service window is closed; use an approved template instead'
+        : 'No inbound customer message found; free-form WhatsApp send blocked',
+    )
+  }
+}
 
 // ------------------------------------------------------------
 // Flows-side Meta sender (interactive variants).
@@ -109,6 +129,10 @@ export async function engineSendText(
     )
   }
   const sanitized = sendTarget.target
+
+  await requireOpenServiceWindow(db, args.accountId, args.conversationId)
+
+  await requireOpenServiceWindow(db, args.accountId, args.conversationId)
 
   const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
     db,
@@ -369,6 +393,8 @@ async function sendInteractiveViaMeta(
     )
   }
   const sanitized = sendTarget.target
+
+  await requireOpenServiceWindow(db, input.accountId, input.conversationId)
 
   const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
     db,
