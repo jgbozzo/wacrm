@@ -113,7 +113,7 @@ This version must be reviewed against Meta's current supported versions before c
 3. ✅ Enforce consent in broadcast creation and resume paths.
 4. ✅ Add service-window enforcement in shared/manual/API and automation/flow send paths.
 5. ✅ Review all `/api/v1` endpoints for explicit account scoping.
-6. Review MCP/n8n permissions and least-privilege defaults.
+6. ✅ Review MCP/n8n permissions and least-privilege defaults.
 7. Review and update dependencies.
 8. Evaluate CSP enforcement.
 9. Run typecheck, tests and production build.
@@ -145,3 +145,9 @@ This version must be reviewed against Meta's current supported versions before c
 - Tightened helper writes that previously relied only on ids obtained from an account-scoped parent query.
 - Added account context to broadcast delivery/finalization guards.
 - While tracing `/api/v1/messages`, closed a separate compliance bypass: out-of-window template sends now require current explicit opt-in, including automation template sends.
+- Split API capabilities further with `contacts:consent` and `broadcasts:read` so normal contact writers and broadcast-status readers do not inherit higher-risk permissions.
+- MCP contact writes, single-message sends, and broadcasts now have independent process-level enable flags.
+- MCP single-message sends now require explicit `confirm=true`, matching the existing broadcast confirmation gate.
+- MCP remote base URLs now require HTTPS (HTTP is limited to loopback development), requests do not follow redirects while carrying API keys, and calls have a 15-second timeout.
+- MCP contact tools intentionally do not expose WhatsApp consent mutation.
+- Added `docs/N8N-AI-SECURITY.md` with separate-key profiles for read-only, responder, contact-sync, consent-capture, and broadcast workflows.
