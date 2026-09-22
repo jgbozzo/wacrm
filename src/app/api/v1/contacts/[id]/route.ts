@@ -12,6 +12,7 @@
 // ============================================================
 
 import { requireApiKey } from '@/lib/auth/api-context';
+import { hasScope } from '@/lib/api-keys/scopes';
 import { ok, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 import {
   getContactById,
@@ -56,6 +57,13 @@ export async function PATCH(
     // Parse before mutating anything so malformed consent data cannot
     // leave the contact only partially updated.
     const consent = parseWhatsAppConsentInput(body);
+    if (consent && !hasScope(ctx.scopes, 'contacts:consent')) {
+      return fail(
+        'forbidden',
+        "This API key is missing the 'contacts:consent' scope",
+        403
+      );
+    }
 
     // Verify the contact is in this account before mutating anything.
     const existing = await getContactById(ctx.supabase, ctx.accountId, id);
