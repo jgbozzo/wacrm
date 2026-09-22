@@ -182,6 +182,14 @@ vi.mock('@/lib/whatsapp/encryption', () => ({
   isLegacyFormat: () => false,
 }));
 
+vi.mock('@/lib/whatsapp/service-window', () => ({
+  getCustomerServiceWindowStatus: vi.fn(async () => ({
+    open: true,
+    lastInboundAt: '2026-09-21T12:00:00.000Z',
+    closesAt: '2026-09-22T12:00:00.000Z',
+  })),
+}));
+
 vi.mock('@/lib/flows/admin-client', () => ({
   // Only used for the best-effort "pause active flow run" write.
   supabaseAdmin: () => ({

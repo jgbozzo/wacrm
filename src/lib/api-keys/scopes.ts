@@ -18,7 +18,9 @@ export const API_SCOPES = [
   'messages:read',
   'contacts:read',
   'contacts:write',
+  'contacts:consent',
   'conversations:read',
+  'broadcasts:read',
   'broadcasts:send',
   'webhooks:manage',
 ] as const;
@@ -31,7 +33,9 @@ export const SCOPE_DESCRIPTIONS: Record<ApiScope, string> = {
   'messages:read': 'Read messages and their delivery status',
   'contacts:read': 'List and read contacts',
   'contacts:write': 'Create and update contacts',
+  'contacts:consent': 'Record WhatsApp opt-in and opt-out evidence',
   'conversations:read': 'List and read conversations',
+  'broadcasts:read': 'Read broadcast campaign status',
   'broadcasts:send': 'Launch broadcast campaigns',
   'webhooks:manage': 'Register and manage outbound event webhooks',
 };

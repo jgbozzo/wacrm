@@ -43,6 +43,11 @@ describe('serializeContact', () => {
       email: null,
       company: 'Acme',
       avatar_url: null,
+      whatsapp_opt_in: false,
+      whatsapp_opt_in_at: null,
+      whatsapp_opt_in_source: null,
+      whatsapp_opt_in_evidence: null,
+      whatsapp_opt_out_at: null,
       tags: [{ id: 't1', name: 'vip', color: '#fff' }],
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-02T00:00:00Z',
@@ -85,7 +90,16 @@ describe('setContactTags', () => {
    */
   function fakeContactTagsDb(currentTagIds: string[]) {
     const removed: string[] = [];
-    const builder = {
+
+    const contactBuilder: Record<string, unknown> = {};
+    contactBuilder.select = () => contactBuilder;
+    contactBuilder.eq = () => contactBuilder;
+    contactBuilder.maybeSingle = async () => ({
+      data: { id: 'c1' },
+      error: null,
+    });
+
+    const tagBuilder = {
       select: () => ({
         eq: async () => ({
           data: currentTagIds.map((tag_id) => ({ tag_id })),
@@ -101,10 +115,12 @@ describe('setContactTags', () => {
         }),
       }),
     };
+
     const db = {
       from: (table: string) => {
+        if (table === 'contacts') return contactBuilder;
         expect(table).toBe('contact_tags');
-        return builder;
+        return tagBuilder;
       },
     } as unknown as SupabaseClient;
     return { db, removed };

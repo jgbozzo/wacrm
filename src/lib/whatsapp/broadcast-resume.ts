@@ -22,6 +22,7 @@ import { BroadcastError, type BroadcastPlan } from '@/lib/whatsapp/broadcast-cor
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { resolveTemplateRow } from '@/lib/whatsapp/template-body';
 import { sanitizePhoneForMeta, isValidE164 } from '@/lib/whatsapp/phone-utils';
+import { hasValidWhatsAppOptIn } from '@/lib/whatsapp/consent';
 
 /** Which recipients a resume pass picks up. */
 export type ResumeScope = 'pending' | 'failed' | 'all';
@@ -118,13 +119,29 @@ export interface ResumePlan {
 interface RecipientRow {
   id: string;
   template_params: unknown;
-  contact: { phone?: string | null } | { phone?: string | null }[] | null;
+  contact:
+    | {
+        phone?: string | null;
+        whatsapp_opt_in?: boolean | null;
+        whatsapp_opt_in_at?: string | null;
+        whatsapp_opt_out_at?: string | null;
+      }
+    | {
+        phone?: string | null;
+        whatsapp_opt_in?: boolean | null;
+        whatsapp_opt_in_at?: string | null;
+        whatsapp_opt_out_at?: string | null;
+      }[]
+    | null;
 }
 
 /** Supabase renders an embedded to-one join as an object or a 1-array. */
+function contactRow(row: RecipientRow) {
+  return Array.isArray(row.contact) ? row.contact[0] : row.contact;
+}
+
 function contactPhone(row: RecipientRow): string | null {
-  const c = Array.isArray(row.contact) ? row.contact[0] : row.contact;
-  return c?.phone ?? null;
+  return contactRow(row)?.phone ?? null;
 }
 
 /**
@@ -158,7 +175,9 @@ export async function planBroadcastResume(
   const statuses = scopeStatuses(scope);
   const { data: rawRows, error: recError } = await db
     .from('broadcast_recipients')
-    .select('id, template_params, contact:contacts(phone)')
+    .select(
+      'id, template_params, contact:contacts(phone, whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_out_at)'
+    )
     .eq('broadcast_id', broadcastId)
     .in('status', statuses)
     // Oldest first, so repeated capped passes chew through the backlog
@@ -172,25 +191,43 @@ export async function planBroadcastResume(
 
   const rows = (rawRows ?? []) as RecipientRow[];
 
-  // A recipient whose contact has no usable phone can never send. Stamp
-  // it failed now: leaving it 'pending' would keep the broadcast in
-  // 'sending' forever, which is the very symptom being fixed.
+  // Re-check both addressability and consent at RESUME time. A contact
+  // may have opted out after the campaign was created but before a retry;
+  // resuming must never bypass that withdrawal.
   const sendable: RecipientRow[] = [];
-  const unsendable: string[] = [];
+  const invalidPhoneIds: string[] = [];
+  const noConsentIds: string[] = [];
   for (const row of rows) {
     const sanitized = sanitizePhoneForMeta(contactPhone(row) ?? '');
-    if (isValidE164(sanitized)) sendable.push(row);
-    else unsendable.push(row.id);
+    if (!isValidE164(sanitized)) {
+      invalidPhoneIds.push(row.id);
+      continue;
+    }
+    if (!hasValidWhatsAppOptIn(contactRow(row))) {
+      noConsentIds.push(row.id);
+      continue;
+    }
+    sendable.push(row);
   }
-  if (unsendable.length > 0) {
+  if (invalidPhoneIds.length > 0) {
     await db
       .from('broadcast_recipients')
       .update({
         status: 'failed',
         error_message: 'No valid phone number on contact',
       })
-      .in('id', unsendable);
+      .in('id', invalidPhoneIds);
   }
+  if (noConsentIds.length > 0) {
+    await db
+      .from('broadcast_recipients')
+      .update({
+        status: 'failed',
+        error_message: 'WhatsApp opt-in not recorded or no longer valid',
+      })
+      .in('id', noConsentIds);
+  }
+  const unsendable = [...invalidPhoneIds, ...noConsentIds];
 
   const slice = sendable.slice(0, RESUME_MAX_PER_REQUEST);
   const remaining = sendable.length - slice.length;
@@ -233,6 +270,7 @@ export async function planBroadcastResume(
   }
 
   const plan: BroadcastPlan = {
+    accountId,
     broadcastId,
     templateName: broadcast.template_name,
     templateLanguage: resolvedTemplate.language,
@@ -247,6 +285,8 @@ export async function planBroadcastResume(
         : [],
     })),
     rejected: 0,
+    rejectedInvalid: 0,
+    rejectedNoConsent: 0,
   };
 
   return { plan, remaining, unsendable: unsendable.length };

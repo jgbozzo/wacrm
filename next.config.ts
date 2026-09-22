@@ -6,10 +6,9 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 /**
  * Baseline security headers applied to every response.
  *
- * CSP ships as `Content-Security-Policy-Report-Only` so the browser
- * surfaces violations in the console without blocking anything — once
- * we have confidence nothing legit trips it (two deploys, a pass on
- * every route), flip the key to `Content-Security-Policy` to enforce.
+ * CSP is enforced in production and kept in Report-Only mode during
+ * local development. Development needs looser script behaviour for the
+ * Next.js dev overlay/HMR; production drops `unsafe-eval`.
  *
  * The rest of the headers are straight blocks, safe to enforce today:
  *   - HSTS: only meaningful on HTTPS (no-op on http://localhost).
@@ -19,6 +18,38 @@ const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
  *     deny them. A supply-chain compromise or a forgotten plugin
  *     can't silently opt back in.
  */
+const isProduction = process.env.NODE_ENV === "production";
+
+const CSP_VALUE = [
+  "default-src 'self'",
+  // Next.js emits inline hydration/bootstrap scripts. A nonce-based
+  // policy would let us remove unsafe-inline, but that requires
+  // request-level nonce plumbing across the App Router. Production
+  // deliberately drops unsafe-eval; it is retained only for dev/HMR.
+  `script-src 'self' 'unsafe-inline'${isProduction ? "" : " 'unsafe-eval'"}`,
+  // Tailwind plus several UI components use inline style attributes.
+  "style-src 'self' 'unsafe-inline'",
+  // Contact avatars may be external HTTPS URLs. Message images can also
+  // be blob: URLs when inbound media is fetched through our auth proxy.
+  "img-src 'self' data: blob: https:",
+  // Media can be served from Supabase or another operator-controlled
+  // HTTPS URL stored in media_url. blob: is used for local previews.
+  "media-src 'self' blob: https:",
+  "font-src 'self' data:",
+  // Supabase REST/realtime needs HTTPS/WSS. The media download helper can
+  // fetch an operator-provided HTTPS media_url in the browser, so HTTPS
+  // cannot be restricted to Supabase without breaking that feature.
+  "connect-src 'self' https: wss://*.supabase.co",
+  // opus-recorder uses a same-origin Web Worker; blob: keeps the policy
+  // compatible with libraries that bootstrap workers from object URLs.
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "frame-src 'none'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
 const SECURITY_HEADERS = [
   {
     key: "Strict-Transport-Security",
@@ -36,30 +67,13 @@ const SECURITY_HEADERS = [
     value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
   },
   {
-    key: "Content-Security-Policy-Report-Only",
-    value: [
-      "default-src 'self'",
-      // Next.js needs 'unsafe-inline' for its inline hydration script
-      // and 'unsafe-eval' in dev + some production optimisations.
-      // Nonce-based CSP is a later project.
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      // Tailwind + inline style attributes on lots of components.
-      "style-src 'self' 'unsafe-inline'",
-      // Supabase public-bucket avatars, contact avatars (arbitrary
-      // https URLs paste-able from the UI), OG images, data URLs for
-      // tiny inline assets.
-      "img-src 'self' data: blob: https:",
-      // Outbound media previews (blob: from MediaRecorder + file picker)
-      // and Supabase public-bucket audio/video the inbox renders.
-      "media-src 'self' blob: https://*.supabase.co",
-      "font-src 'self' data:",
-      // Supabase REST + realtime (WSS). All Meta API calls happen
-      // server-side, so graph.facebook.com does not belong here.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join("; "),
+    // Enforce in production; report only in local development so the
+    // Next.js dev overlay/HMR can surface violations without being
+    // blocked by production-oriented policy.
+    key: isProduction
+      ? "Content-Security-Policy"
+      : "Content-Security-Policy-Report-Only",
+    value: CSP_VALUE,
   },
 ] as const;
 

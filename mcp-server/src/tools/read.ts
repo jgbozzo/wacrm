@@ -116,7 +116,7 @@ export function registerReadTools(server: McpServer, client: WacrmClient): void 
     {
       title: 'Get broadcast status',
       description:
-        'Read a broadcast campaign by id — its status and delivered / read / rejected counts. Use this to poll progress after launching one.',
+        'Read a broadcast campaign by id — its status and delivery counts. Requires broadcasts:read (or legacy broadcasts:send) and never sends anything.',
       inputSchema: {
         id: z.string().describe('Broadcast id.'),
       },

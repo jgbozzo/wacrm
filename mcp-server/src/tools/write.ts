@@ -1,16 +1,17 @@
 // ============================================================
-// Write tools — registered only when WACRM_ENABLE_WRITES is set.
+// Write tools.
 //
-// These change data or send a WhatsApp message. They are gated so a
-// read-only deployment never exposes them to the model at all. (The
-// API key's scopes are still enforced server-side; a call without the
-// right scope returns a clean `forbidden` error.)
+// Contact writes are registered only when WACRM_ENABLE_WRITES is set.
+// Message sending has an additional WACRM_ENABLE_MESSAGES gate so an
+// assistant allowed to edit CRM data does not automatically gain the
+// ability to contact real people. API-key scopes remain a second,
+// server-side guard.
 // ============================================================
 
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { WacrmClient } from '../client.js';
-import { handle, jsonResult } from './shared.js';
+import { errorResult, handle, jsonResult } from './shared.js';
 
 const templateSchema = z
   .object({
@@ -23,7 +24,10 @@ const templateSchema = z
   })
   .describe('Template payload — required when type is "template".');
 
-export function registerWriteTools(server: McpServer, client: WacrmClient): void {
+export function registerMessageTools(
+  server: McpServer,
+  client: WacrmClient,
+): void {
   server.registerTool(
     'send_message',
     {
@@ -51,12 +55,37 @@ export function registerWriteTools(server: McpServer, client: WacrmClient): void
           .string()
           .optional()
           .describe('Optional id of a message in the same conversation to reply to.'),
+        confirm: z
+          .boolean()
+          .describe(
+            'Must be true only after the user has explicitly approved the recipient and message content.',
+          ),
       },
-      annotations: { title: 'Send WhatsApp message', readOnlyHint: false, openWorldHint: true },
+      annotations: {
+        title: 'Send WhatsApp message',
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
     },
-    handle(async (args) => jsonResult(await client.sendMessage(args))),
+    handle(async ({ confirm, ...body }) => {
+      if (confirm !== true) {
+        return errorResult(
+          'Refusing to send: confirm must be true. Show the recipient and exact message/template to the user and obtain explicit approval first.',
+        );
+      }
+      return jsonResult(await client.sendMessage(body));
+    }),
   );
 
+
+}
+
+export function registerWriteTools(
+  server: McpServer,
+  client: WacrmClient,
+): void {
   server.registerTool(
     'create_contact',
     {

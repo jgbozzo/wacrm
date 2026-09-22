@@ -8,7 +8,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { WacrmClient } from '../client.js';
 import type { Config } from '../config.js';
 import { registerReadTools } from './read.js';
-import { registerWriteTools } from './write.js';
+import { registerMessageTools, registerWriteTools } from './write.js';
 import { registerBroadcastTools } from './broadcast.js';
 
 export function registerTools(server: McpServer, client: WacrmClient, config: Config): string[] {
@@ -18,6 +18,11 @@ export function registerTools(server: McpServer, client: WacrmClient, config: Co
   if (config.enableWrites) {
     registerWriteTools(server, client);
     enabled.push('write');
+  }
+
+  if (config.enableMessages) {
+    registerMessageTools(server, client);
+    enabled.push('message');
   }
 
   if (config.enableBroadcasts) {

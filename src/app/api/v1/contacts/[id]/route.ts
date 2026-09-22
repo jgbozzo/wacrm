@@ -6,13 +6,19 @@
 // returns 404 (never 403 — don't reveal it exists elsewhere).
 // PATCH updates only the fields present in the body; pass `tags` (an
 // array of tag names) to replace the contact's tags.
+//
+// WhatsApp consent is updated only when `whatsapp_opt_in` is present.
+// Opt-in requires a source; timestamps are generated server-side.
 // ============================================================
 
 import { requireApiKey } from '@/lib/auth/api-context';
+import { hasScope } from '@/lib/api-keys/scopes';
 import { ok, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 import {
   getContactById,
   setContactTags,
+  setWhatsAppConsent,
+  parseWhatsAppConsentInput,
   resolveAuditUserId,
   ContactError,
 } from '@/lib/api/v1/contacts';
@@ -48,6 +54,17 @@ export async function PATCH(
       return fail('bad_request', 'Request body must be a JSON object', 400);
     }
 
+    // Parse before mutating anything so malformed consent data cannot
+    // leave the contact only partially updated.
+    const consent = parseWhatsAppConsentInput(body);
+    if (consent && !hasScope(ctx.scopes, 'contacts:consent')) {
+      return fail(
+        'forbidden',
+        "This API key is missing the 'contacts:consent' scope",
+        403
+      );
+    }
+
     // Verify the contact is in this account before mutating anything.
     const existing = await getContactById(ctx.supabase, ctx.accountId, id);
     if (!existing) return fail('not_found', 'Contact not found', 404);
@@ -80,6 +97,15 @@ export async function PATCH(
       }
     }
 
+    if (consent) {
+      await setWhatsAppConsent(
+        ctx.supabase,
+        ctx.accountId,
+        id,
+        consent
+      );
+    }
+
     if (Array.isArray(body.tags)) {
       const auditUserId = await resolveAuditUserId(ctx.supabase, ctx.accountId);
       await setContactTags(
@@ -95,7 +121,15 @@ export async function PATCH(
     return ok(contact);
   } catch (err) {
     if (err instanceof ContactError) {
-      return fail(err.status === 400 ? 'bad_request' : 'internal', err.message, err.status);
+      return fail(
+        err.status === 400
+          ? 'bad_request'
+          : err.status === 404
+            ? 'not_found'
+            : 'internal',
+        err.message,
+        err.status
+      );
     }
     return toApiErrorResponse(err);
   }

@@ -95,7 +95,8 @@ export async function resolveConversationByPhone(
       await db
         .from('contacts')
         .update({ name, updated_at: new Date().toISOString() })
-        .eq('id', existing.id);
+        .eq('id', existing.id)
+        .eq('account_id', accountId);
     }
   } else {
     const { data: created, error: createErr } = await db

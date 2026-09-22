@@ -47,7 +47,9 @@ it. Grant the minimum.
 | `messages:read`      | Read messages and delivery status        |
 | `contacts:read`      | List and read contacts                   |
 | `contacts:write`     | Create and update contacts               |
+| `contacts:consent`   | Record WhatsApp opt-in / opt-out         |
 | `conversations:read` | List and read conversations              |
+| `broadcasts:read`    | Read broadcast campaign status           |
 | `broadcasts:send`    | Launch broadcast campaigns               |
 | `webhooks:manage`    | Register and manage outbound webhooks    |
 
@@ -160,9 +162,17 @@ Response (201):
 }
 ```
 
+Free-form `text`, media and interactive messages are accepted only
+while the 24-hour customer service window is open, measured from the
+customer's most recent inbound message. Outbound agent/bot messages do
+not renew the window. Outside it, use an approved `template` message.
+
 Domain error codes beyond the table above: `whatsapp_not_configured`
-(400), `meta_error` (502 — the request reached Meta and it rejected the
-send), `template_malformed` (500).
+(400), `customer_service_window_closed` (409 — use an approved
+template), `service_window_check_failed` (500 — the local window state
+could not be verified, so the send failed closed), `meta_error` (502 —
+the request reached Meta and it rejected the send), and
+`template_malformed` (500).
 
 ### `GET /api/v1/contacts`
 
@@ -176,6 +186,11 @@ or phone) and `?tag=<tagId>`.
     {
       "id": "…", "phone": "+14155550123", "name": "Jane Doe",
       "email": null, "company": "Acme", "avatar_url": null,
+      "whatsapp_opt_in": true,
+      "whatsapp_opt_in_at": "2026-09-21T22:00:00.000Z",
+      "whatsapp_opt_in_source": "website_form",
+      "whatsapp_opt_in_evidence": "lead-form submission 8f3c…",
+      "whatsapp_opt_out_at": null,
       "tags": [{ "id": "…", "name": "vip", "color": "#3b82f6" }],
       "created_at": "…", "updated_at": "…"
     }
@@ -193,12 +208,46 @@ match returns `200` with the existing contact; a new contact returns
 `201`. The response body is the serialized contact (same shape as the
 list rows above).
 
+Contact creation **does not imply WhatsApp consent**. Reading/writing normal
+contact fields uses `contacts:write`, while recording consent additionally
+requires the dedicated `contacts:consent` scope. New and existing contacts
+remain opted out unless the request explicitly contains
+`"whatsapp_opt_in": true`. An opt-in also requires a non-empty
+`whatsapp_opt_in_source`; optional `whatsapp_opt_in_evidence` can hold
+a form submission id, source URL, signed-form note, or equivalent
+reference. The server records `whatsapp_opt_in_at` itself so API clients
+cannot silently backdate consent.
+
+Example:
+
+```json
+{
+  "phone": "+14155550123",
+  "name": "Jane Doe",
+  "whatsapp_opt_in": true,
+  "whatsapp_opt_in_source": "website_form",
+  "whatsapp_opt_in_evidence": "lead-form submission 8f3c…"
+}
+```
+
 ### `GET` / `PATCH /api/v1/contacts/{id}`
 
 Read or update one contact. Scopes: `contacts:read` / `contacts:write`.
 `PATCH` updates only the fields you send (`name`, `email`, `company`);
 pass `tags` (an array of tag names) to replace the contact's tags. A
 contact in another account returns `404`.
+
+Consent can be changed through the same endpoint only when the API key also
+has `contacts:consent`:
+
+- `whatsapp_opt_in: true` requires `whatsapp_opt_in_source` and records
+  a new server-side opt-in timestamp. `whatsapp_opt_in_evidence` is
+  optional.
+- `whatsapp_opt_in: false` records an opt-out timestamp immediately.
+  Previous opt-in timestamp/source/evidence are retained as audit
+  history.
+- Supplying source/evidence without `whatsapp_opt_in` is rejected with
+  `400 bad_request`.
 
 ### `GET /api/v1/conversations`
 
@@ -242,7 +291,16 @@ curl -X POST https://your-crm.example.com/api/v1/broadcasts \
 ```
 
 Recipients are capped at **1000 per request** — split larger sends.
-Invalid phone numbers are dropped and counted as `rejected`. Response
+
+A recipient is eligible only when:
+
+- the phone number is valid E.164,
+- the phone resolves to an existing contact in the same account, and
+- that contact has a current explicit WhatsApp opt-in.
+
+The endpoint no longer auto-creates contacts from a raw broadcast list:
+contact existence is not treated as consent. Invalid phones and
+missing/withdrawn consent are rejected before any Meta call. Response
 (202):
 
 ```json
@@ -252,14 +310,17 @@ Invalid phone numbers are dropped and counted as `rejected`. Response
     "status": "sending",
     "total_recipients": 2,
     "accepted": 2,
-    "rejected": 0
+    "rejected": 0,
+    "rejected_invalid": 0,
+    "rejected_no_consent": 0
   }
 }
 ```
 
 ### `GET /api/v1/broadcasts/{id}`
 
-Broadcast status + counts. Scope: `broadcasts:send`. `status` moves
+Broadcast status + counts. Scope: `broadcasts:read` (legacy keys with
+`broadcasts:send` are also accepted). `status` moves
 `sending` → `sent`; `delivered_count` / `read_count` keep climbing as
 Meta delivery webhooks arrive. `404` for another account's broadcast.
 

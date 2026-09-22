@@ -47,6 +47,8 @@ import {
   templateBodyParams,
   templateContentText,
 } from '@/lib/whatsapp/template-body';
+import { getCustomerServiceWindowStatus } from '@/lib/whatsapp/service-window';
+import { hasValidWhatsAppOptIn } from '@/lib/whatsapp/consent';
 
 export const MEDIA_KINDS = ['image', 'video', 'document', 'audio'] as const;
 export const VALID_MESSAGE_TYPES = [
@@ -233,6 +235,61 @@ export async function sendMessageToConversation(
   }
 
   const contact = conversation.contact;
+
+  // Meta permits free-form text, media and interactive replies only
+  // during the 24-hour customer service window opened/renewed by the
+  // customer's latest inbound message. Outside that window, a template
+  // is required — and a business-initiated send must have recorded
+  // explicit WhatsApp consent.
+  //
+  // Enforce this locally BEFORE decrypting credentials or calling Meta so
+  // dashboard, public API, n8n and MCP sends all share the same guard.
+  let serviceWindow;
+  try {
+    serviceWindow = await getCustomerServiceWindowStatus(
+      db,
+      accountId,
+      conversationId
+    );
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Unknown service-window error';
+    console.error('[send-message] service-window check failed:', message);
+
+    // If this is a template and consent is independently known to be
+    // valid, allowing the send is still policy-safe even if window state
+    // cannot be read. Everything else fails closed.
+    if (messageType !== 'template' || !hasValidWhatsAppOptIn(contact)) {
+      throw new SendMessageError(
+        'service_window_check_failed',
+        'Could not verify the WhatsApp customer service window; send blocked.',
+        500
+      );
+    }
+    serviceWindow = { open: false, lastInboundAt: null, closesAt: null };
+  }
+
+  if (messageType !== 'template' && !serviceWindow.open) {
+    throw new SendMessageError(
+      'customer_service_window_closed',
+      serviceWindow.lastInboundAt
+        ? 'The 24-hour WhatsApp customer service window is closed. Send an approved template message instead.'
+        : 'No inbound customer message was found. Send an approved template message instead of free-form content.',
+      409
+    );
+  }
+
+  if (
+    messageType === 'template' &&
+    !serviceWindow.open &&
+    !hasValidWhatsAppOptIn(contact)
+  ) {
+    throw new SendMessageError(
+      'whatsapp_opt_in_required',
+      'A current explicit WhatsApp opt-in is required for a business-initiated template message outside the customer service window.',
+      409
+    );
+  }
 
   // A contact is addressable by phone number OR by business-scoped user
   // ID. Meta withholds the phone number for a customer who has adopted
@@ -449,7 +506,8 @@ export async function sendMessageToConversation(
     await db
       .from('contacts')
       .update({ phone: workingPhone })
-      .eq('id', contact.id);
+      .eq('id', contact.id)
+      .eq('account_id', accountId);
   }
 
   // Persist the sent message. Field names MUST match the messages
@@ -512,7 +570,8 @@ export async function sendMessageToConversation(
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', conversationId);
+    .eq('id', conversationId)
+    .eq('account_id', accountId);
 
   // Pause any active Flow run for this contact — the agent stepping in
   // is the strongest "yield, human is here" signal. Best-effort.

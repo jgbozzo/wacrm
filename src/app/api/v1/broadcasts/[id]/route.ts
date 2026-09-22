@@ -16,7 +16,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const ctx = await requireApiKey(request, 'broadcasts:send');
+    // Prefer the read-only scope; accept broadcasts:send for backward
+    // compatibility with keys created before broadcasts:read existed.
+    const ctx = await requireApiKey(request, [
+      'broadcasts:read',
+      'broadcasts:send',
+    ]);
     const { id } = await params;
 
     const { data, error } = await ctx.supabase

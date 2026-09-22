@@ -1,0 +1,165 @@
+# Security Hardening Plan
+
+This document records the security and WhatsApp/Meta compliance hardening work for the `security-hardening` branch.
+
+## Scope
+
+The goal is to reduce the risk of accidental policy violations, credential exposure, unsafe automation, and unintended messaging while preserving the existing official WhatsApp Cloud API integration.
+
+## Baseline verified
+
+The current codebase already includes several strong controls:
+
+- Official WhatsApp Cloud API integration through Meta Graph API.
+- HMAC-SHA256 verification of inbound Meta webhook signatures.
+- Fail-closed behavior when `META_APP_SECRET` is missing.
+- AES-256-GCM encryption for stored WhatsApp access tokens and other sensitive secrets.
+- API keys stored as hashes and protected by explicit scopes.
+- MCP write operations disabled by default unless explicitly enabled.
+- Separate broadcast guard for MCP.
+- Account-scoped queries in the critical public API paths reviewed so far.
+- Per-key and per-user in-memory rate limiting.
+- Security headers including HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy and CSP report-only mode.
+
+## Main gaps identified
+
+### 1. WhatsApp consent / opt-in
+
+Broadcast creation currently validates recipient phone numbers, templates and deduplication, but does not require a stored opt-in record for each recipient.
+
+Planned additions:
+
+- `whatsapp_opt_in`
+- `whatsapp_opt_in_at`
+- `whatsapp_opt_in_source`
+- `whatsapp_opt_in_evidence`
+- `whatsapp_opt_out_at`
+
+A new migration will add these fields without modifying historical migrations.
+
+### 2. Broadcast enforcement
+
+`src/lib/whatsapp/broadcast-core.ts` must reject or exclude recipients that do not have valid recorded WhatsApp consent.
+
+The compliance check must live in shared broadcast logic so it also protects API, dashboard, n8n and AI-driven workflows.
+
+### 3. Customer service window enforcement
+
+`src/lib/whatsapp/send-message.ts` currently relies on Meta to reject free-form messages sent outside the customer service window.
+
+A local guard should be added so non-template sends are blocked before reaching Meta when the most recent qualifying inbound customer interaction is outside the allowed service window.
+
+The guard should be implemented in the shared send core so it applies consistently to:
+
+- Dashboard sends
+- Public API sends
+- n8n
+- MCP
+- AI automation
+
+### 4. Opt-out handling
+
+A recorded opt-out must prevent future marketing/broadcast messaging until a valid new opt-in is recorded.
+
+### 5. Public API tenancy review
+
+The public API uses a Supabase service-role client and therefore bypasses RLS. Every endpoint must explicitly constrain queries by `accountId`.
+
+Critical paths reviewed so far do this correctly. A complete endpoint-by-endpoint audit is still pending.
+
+### 6. Content Security Policy
+
+The current CSP is configured as `Content-Security-Policy-Report-Only`.
+
+After validating all routes and legitimate resources, it should be evaluated for enforcement as `Content-Security-Policy`.
+
+### 7. Rate limiting
+
+The current limiter is in-memory and per process.
+
+This is acceptable for a single-instance deployment. Multi-instance or horizontally scaled deployments should replace it with a shared store such as Redis/Upstash.
+
+### 8. Meta Graph API version
+
+`src/lib/whatsapp/meta-api.ts` currently pins a Graph API version.
+
+This version must be reviewed against Meta's current supported versions before changing it. No version bump should be made without checking breaking changes.
+
+## Files reviewed
+
+- `.env.local.example`
+- `package.json`
+- `next.config.ts`
+- `docs/public-api.md`
+- `mcp-server/README.md`
+- `src/app/api/v1/messages/route.ts`
+- `src/app/api/v1/broadcasts/route.ts`
+- `src/app/api/whatsapp/send/route.ts`
+- `src/app/api/whatsapp/webhook/route.ts`
+- `src/lib/auth/api-context.ts`
+- `src/lib/rate-limit.ts`
+- `src/lib/whatsapp/send-message.ts`
+- `src/lib/whatsapp/broadcast-core.ts`
+- `src/lib/whatsapp/encryption.ts`
+- `src/lib/whatsapp/webhook-signature.ts`
+- `src/lib/whatsapp/meta-api.ts`
+- `supabase/migrations/001_initial_schema.sql`
+- `supabase/migrations/028_webhook_endpoints.sql`
+
+## Planned implementation order
+
+1. ✅ Add consent fields in a new Supabase migration.
+2. ✅ Add contact-level opt-in/opt-out read/write support.
+3. ✅ Enforce consent in broadcast creation and resume paths.
+4. ✅ Add service-window enforcement in shared/manual/API and automation/flow send paths.
+5. ✅ Review all `/api/v1` endpoints for explicit account scoping.
+6. ✅ Review MCP/n8n permissions and least-privilege defaults.
+7. ✅ Review and update dependencies.
+8. ✅ Evaluate and enforce CSP in production.
+9. ✅ Run dependency audit, lint, typecheck, tests, migration replay and production builds.
+10. ✅ Review the final diff and open a verification PR. Merge to `main` remains pending explicit approval.
+
+## Change log
+
+### 2026-09-21
+
+- Created this hardening plan.
+- Added `supabase/migrations/043_whatsapp_consent.sql`.
+- Existing contacts default to `whatsapp_opt_in = false`; contact existence/import never implies consent.
+- Added public API read/write support for opt-in/opt-out.
+- Opt-in requires an explicit source and receives a server-side timestamp.
+- Opt-out receives a server-side timestamp while prior opt-in metadata is retained as audit history.
+- Added consent fields to the shared `Contact` type and public API documentation.
+- Broadcast enforcement is now active in both the public API and dashboard send paths.
+- Broadcast recipients must resolve to an existing same-account contact with a current explicit opt-in.
+- Raw broadcast phone lists no longer auto-create contacts.
+- Resume/retry re-checks consent so a later opt-out cannot be bypassed.
+- Public API responses now distinguish invalid-number rejections from missing/withdrawn-consent rejections.
+- Added unit coverage for consent validation.
+- Added a shared 24-hour customer-service-window checker based only on the latest inbound customer message.
+- Manual/dashboard and public API non-template sends now fail closed outside the window.
+- Flow text/media/interactive sends and automation text/interactive sends use the same rule; AI auto-reply inherits the guard through the flow sender.
+- Templates can be used outside the customer service window only when the contact has a current explicit WhatsApp opt-in.
+- Added unit coverage for the exact 24-hour boundary and fail-closed timestamp handling.
+- Completed an account-isolation audit of all 11 `/api/v1` route files (16 HTTP handlers); see `docs/API-TENANCY-AUDIT.md`.
+- Tightened helper writes that previously relied only on ids obtained from an account-scoped parent query.
+- Added account context to broadcast delivery/finalization guards.
+- While tracing `/api/v1/messages`, closed a separate compliance bypass: out-of-window template sends now require current explicit opt-in, including automation template sends.
+- Split API capabilities further with `contacts:consent` and `broadcasts:read` so normal contact writers and broadcast-status readers do not inherit higher-risk permissions.
+- MCP contact writes, single-message sends, and broadcasts now have independent process-level enable flags.
+- MCP single-message sends now require explicit `confirm=true`, matching the existing broadcast confirmation gate.
+- MCP remote base URLs now require HTTPS (HTTP is limited to loopback development), requests do not follow redirects while carrying API keys, and calls have a 15-second timeout.
+- MCP contact tools intentionally do not expose WhatsApp consent mutation.
+- Added `docs/N8N-AI-SECURITY.md` with separate-key profiles for read-only, responder, contact-sync, consent-capture, and broadcast workflows.
+- Completed a dependency security review; see `docs/DEPENDENCY-SECURITY-AUDIT.md`.
+- Raised the MCP SDK security floor to `^1.30.0` and the root `fast-uri` override floor to `^3.1.7`.
+- Confirmed the locked Next.js, sharp, PostCSS, Hono and fast-uri versions are above the high/critical patched baselines reviewed in this phase.
+- Added root and MCP `npm audit --audit-level=high` gates plus MCP typecheck/build to CI.
+- Enforced Content Security Policy in production while retaining Report-Only mode for local development.
+- Removed `unsafe-eval` from the production CSP.
+- Added `object-src 'none'`, `frame-src 'none'`, and an explicit worker policy for the browser Opus encoder.
+- Broadened media/connect directives only where required by existing external media URL functionality; see `docs/CSP-SECURITY.md`.
+- Deferred a routine Supabase bump because the 2.110.x line changes the Node.js support contract; no security finding requires that upgrade.
+- GitHub Actions verification passed on the hardened branch: dependency audit, lint, TypeScript, unit tests, production build, MCP audit/typecheck/build, and full Supabase migration replay all succeeded.
+- Final diff review found no unintended changes to `main`; temporary branch-only CI trigger edits were restored before merge consideration.
+- Pull request #1 remains unmerged pending explicit approval.

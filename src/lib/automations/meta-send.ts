@@ -10,6 +10,8 @@ import {
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { resolveContactSendTarget } from '@/lib/whatsapp/wa-identity'
+import { getCustomerServiceWindowStatus } from '@/lib/whatsapp/service-window'
+import { hasValidWhatsAppOptIn } from '@/lib/whatsapp/consent'
 import {
   resolveTemplateRow,
   templateContentText,
@@ -121,7 +123,9 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
   // new tenancy column.
   const { data: contact, error: contactErr } = await db
     .from('contacts')
-    .select('id, phone, wa_user_id')
+    .select(
+      'id, phone, wa_user_id, whatsapp_opt_in, whatsapp_opt_in_at, whatsapp_opt_out_at',
+    )
     .eq('id', input.contactId)
     .eq('account_id', input.accountId)
     .maybeSingle()
@@ -138,6 +142,30 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     )
   }
   const sanitized = sendTarget.target
+
+  const serviceWindow = await getCustomerServiceWindowStatus(
+    db,
+    input.accountId,
+    input.conversationId,
+  )
+
+  if (input.kind === 'text' && !serviceWindow.open) {
+    throw new Error(
+      serviceWindow.lastInboundAt
+        ? 'WhatsApp 24-hour customer service window is closed; use an approved template instead'
+        : 'No inbound customer message found; free-form WhatsApp send blocked',
+    )
+  }
+
+  if (
+    input.kind === 'template' &&
+    !serviceWindow.open &&
+    !hasValidWhatsAppOptIn(contact)
+  ) {
+    throw new Error(
+      'A current explicit WhatsApp opt-in is required for a business-initiated template message outside the customer service window',
+    )
+  }
 
   const { data: config, error: configErr } = await db
     .from('whatsapp_config')

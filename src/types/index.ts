@@ -119,6 +119,16 @@ export interface Contact {
   email?: string;
   company?: string;
   avatar_url?: string;
+  /** Explicit permission for proactive WhatsApp messaging. Migration 041. */
+  whatsapp_opt_in?: boolean;
+  /** Server-recorded timestamp of the most recent valid opt-in. */
+  whatsapp_opt_in_at?: string | null;
+  /** Where the opt-in was collected (form, checkout, verified manual entry, etc.). */
+  whatsapp_opt_in_source?: string | null;
+  /** Human-readable evidence/reference supporting the recorded opt-in. */
+  whatsapp_opt_in_evidence?: string | null;
+  /** Timestamp of the most recent opt-out, if any. */
+  whatsapp_opt_out_at?: string | null;
   created_at: string;
   updated_at: string;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the

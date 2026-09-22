@@ -6,9 +6,14 @@
 // supports `?search=` (name/phone) and `?tag=<tagId>` filters. Create
 // is find-or-create by phone: an existing match returns 200 with
 // `created: false`; a new row returns 201 with `created: true`.
+//
+// WhatsApp consent is NEVER inferred from contact creation. Callers
+// that want to record an opt-in must explicitly send
+// `whatsapp_opt_in: true` plus `whatsapp_opt_in_source`.
 // ============================================================
 
 import { requireApiKey } from '@/lib/auth/api-context';
+import { hasScope } from '@/lib/api-keys/scopes';
 import { ok, okList, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 import {
   parseListParams,
@@ -20,6 +25,8 @@ import {
   serializeContact,
   findOrCreateContact,
   setContactTags,
+  setWhatsAppConsent,
+  parseWhatsAppConsentInput,
   getContactById,
   resolveAuditUserId,
   ContactError,
@@ -110,6 +117,17 @@ export async function POST(request: Request) {
       return fail('bad_request', "'phone' is required", 400);
     }
 
+    // Parse before creating anything so malformed consent input cannot
+    // leave an otherwise-valid contact behind.
+    const consent = parseWhatsAppConsentInput(body);
+    if (consent && !hasScope(ctx.scopes, 'contacts:consent')) {
+      return fail(
+        'forbidden',
+        "This API key is missing the 'contacts:consent' scope",
+        403
+      );
+    }
+
     const auditUserId = await resolveAuditUserId(ctx.supabase, ctx.accountId);
 
     const { id, created } = await findOrCreateContact(
@@ -123,6 +141,15 @@ export async function POST(request: Request) {
         company: typeof body.company === 'string' ? body.company : undefined,
       }
     );
+
+    if (consent) {
+      await setWhatsAppConsent(
+        ctx.supabase,
+        ctx.accountId,
+        id,
+        consent
+      );
+    }
 
     if (Array.isArray(body.tags)) {
       await setContactTags(
@@ -139,7 +166,11 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof ContactError) {
       return fail(
-        err.status === 400 ? 'bad_request' : 'internal',
+        err.status === 400
+          ? 'bad_request'
+          : err.status === 404
+            ? 'not_found'
+            : 'internal',
         err.message,
         err.status
       );
