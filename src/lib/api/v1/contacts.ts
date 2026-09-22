@@ -299,6 +299,22 @@ export async function setContactTags(
   contactId: string,
   tagNames: string[]
 ): Promise<void> {
+  // contact_tags has no account_id column of its own. Because public API
+  // calls use a service-role client, verify the parent contact belongs to
+  // this account before touching the join table.
+  const { data: ownedContact, error: ownershipError } = await db
+    .from('contacts')
+    .select('id')
+    .eq('id', contactId)
+    .eq('account_id', accountId)
+    .maybeSingle();
+  if (ownershipError) {
+    throw new ContactError('Failed to verify contact ownership', 500);
+  }
+  if (!ownedContact) {
+    throw new ContactError('Contact not found', 404);
+  }
+
   const { tagIdByKey } = await resolveImportTagIds(db, {
     accountId,
     userId: auditUserId,
