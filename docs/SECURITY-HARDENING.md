@@ -155,4 +155,8 @@ This version must be reviewed against Meta's current supported versions before c
 - Raised the MCP SDK security floor to `^1.30.0` and the root `fast-uri` override floor to `^3.1.7`.
 - Confirmed the locked Next.js, sharp, PostCSS, Hono and fast-uri versions are above the high/critical patched baselines reviewed in this phase.
 - Added root and MCP `npm audit --audit-level=high` gates plus MCP typecheck/build to CI.
+- Enforced Content Security Policy in production while retaining Report-Only mode for local development.
+- Removed `unsafe-eval` from the production CSP.
+- Added `object-src 'none'`, `frame-src 'none'`, and an explicit worker policy for the browser Opus encoder.
+- Broadened media/connect directives only where required by existing external media URL functionality; see `docs/CSP-SECURITY.md`.
 - Deferred a routine Supabase bump because the 2.110.x line changes the Node.js support contract; no security finding requires that upgrade.
