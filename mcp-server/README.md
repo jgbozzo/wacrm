@@ -21,15 +21,16 @@ wacrm instance — this server just exposes the API as MCP tools.
 
 ## Install & configure
 
-The server reads two required environment variables and two optional
+The server reads two required environment variables and three optional
 write guards:
 
 | Variable                  | Required | Purpose                                                        |
 | ------------------------- | -------- | -------------------------------------------------------------- |
 | `WACRM_BASE_URL`          | yes      | Your instance URL, e.g. `https://crm.example.com`              |
 | `WACRM_API_KEY`           | yes      | An API key from the dashboard                                  |
-| `WACRM_ENABLE_WRITES`     | no       | `true` to expose contact writes + message sending             |
-| `WACRM_ENABLE_BROADCASTS` | no       | `true` to expose mass broadcasts (needs `WACRM_ENABLE_WRITES`) |
+| `WACRM_ENABLE_WRITES`     | no       | `true` to expose contact create/update tools                    |
+| `WACRM_ENABLE_MESSAGES`   | no       | `true` to expose single-message sending (also needs writes)      |
+| `WACRM_ENABLE_BROADCASTS` | no       | `true` to expose mass broadcasts (also needs writes)             |
 
 ### Claude Desktop / Claude Code / Cursor
 
@@ -59,6 +60,7 @@ assistant change data or send messages, add the write guards:
   "WACRM_BASE_URL": "https://crm.example.com",
   "WACRM_API_KEY": "wacrm_live_xxxxxxxxxxxxxxxxxxxxxxxx",
   "WACRM_ENABLE_WRITES": "true",
+  "WACRM_ENABLE_MESSAGES": "true",
   "WACRM_ENABLE_BROADCASTS": "true"
 }
 ```
@@ -76,8 +78,8 @@ when their guard is set.
 | `list_conversations` | read      | `conversations:read` | List conversations, filter by status/contact    |
 | `get_conversation`   | read      | `conversations:read` | Read one conversation                           |
 | `list_messages`      | read      | `messages:read`      | List a conversation's messages                  |
-| `get_broadcast`      | read      | `broadcasts:send`    | Poll a broadcast's delivery status              |
-| `send_message`       | write     | `messages:send`      | Send a WhatsApp message (text/template/media)   |
+| `get_broadcast`      | read      | `broadcasts:read`    | Poll a broadcast's delivery status              |
+| `send_message`       | message   | `messages:send`      | Send a WhatsApp message (requires `confirm`)    |
 | `create_contact`     | write     | `contacts:write`     | Create (find-or-create) a contact               |
 | `update_contact`     | write     | `contacts:write`     | Update a contact / replace its tags             |
 | `send_broadcast`     | broadcast | `broadcasts:send`    | Launch a template broadcast (requires `confirm`)|
@@ -87,16 +89,23 @@ when their guard is set.
 Sending WhatsApp messages through an LLM is a real-world side effect, so
 the server layers three guards:
 
-1. **Read-only by default.** Write and broadcast tools are not even
-   registered — the model can't see them — unless you opt in via
-   `WACRM_ENABLE_WRITES` / `WACRM_ENABLE_BROADCASTS`.
+1. **Read-only by default.** Contact writes, single-message sending, and
+   broadcasts are not exposed unless separately enabled. `WACRM_ENABLE_WRITES`
+   enables CRM contact changes; `WACRM_ENABLE_MESSAGES` additionally enables
+   single-message sends; `WACRM_ENABLE_BROADCASTS` separately enables mass
+   sends.
 2. **API-key scopes.** Whatever the guards allow, your wacrm instance
    still enforces the key's scopes. A call without the right scope
    returns a clean `forbidden` error. Issue a read-only key for a
    read-only assistant.
-3. **Explicit broadcast confirmation.** `send_broadcast` refuses to run
-   unless called with `confirm: true`, and is marked `destructive` so
-   compliant clients prompt the user first.
+3. **Explicit send confirmation.** Both `send_message` and
+   `send_broadcast` refuse to run unless called with `confirm: true`.
+   Broadcasts are additionally marked destructive.
+4. **Consent is not writable through MCP tools.** Contact write tools do not
+   expose WhatsApp opt-in/opt-out fields. Consent changes belong in a verified
+   workflow using the dedicated `contacts:consent` API scope.
+5. **TLS required.** Remote `WACRM_BASE_URL` values must use `https://`;
+   plain HTTP is accepted only for localhost/loopback development.
 
 ## Development
 
