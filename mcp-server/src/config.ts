@@ -2,8 +2,9 @@
 // Configuration — read once at startup from the environment.
 //
 // The server needs the URL of a wacrm instance and an API key.
-// Two opt-in flags decide whether write / broadcast tools are
-// registered at all: by default the server is READ-ONLY, so an
+// Three independent opt-in flags decide whether contact writes,
+// single-message sends, and broadcast tools are registered. By
+// default the server is READ-ONLY, so an
 // MCP client can never see a tool that mutates data or sends a
 // message unless the operator turns it on deliberately. The API
 // key's own scopes are still enforced server-side on top of this —
