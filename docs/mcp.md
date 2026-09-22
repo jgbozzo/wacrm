@@ -36,23 +36,38 @@ other API call.
    }
    ```
 
-That's **read-only** — the safe default. To let the assistant change
-data or send messages, add `"WACRM_ENABLE_WRITES": "true"` (and
-`"WACRM_ENABLE_BROADCASTS": "true"` for mass sends) to `env`.
+That's **read-only** — the safe default. Side effects are split into
+separate gates:
+
+- `WACRM_ENABLE_WRITES=true` exposes contact create/update tools.
+- `WACRM_ENABLE_MESSAGES=true` additionally exposes single-message
+  sending and requires `WACRM_ENABLE_WRITES=true`.
+- `WACRM_ENABLE_BROADCASTS=true` exposes mass broadcasts and also
+  requires `WACRM_ENABLE_WRITES=true`.
 
 ## What it exposes
 
 - **Reads (always on):** `whoami`, contacts (list/get), conversations
   (list/get), messages (list), broadcast status.
-- **Writes (opt-in):** send a message, create/update a contact.
-- **Broadcasts (opt-in):** launch a template broadcast — requires an
-  explicit `confirm` and is marked destructive.
+- **Contact writes (opt-in):** create/update a contact.
+- **Single-message sending (separate opt-in):** send text/template/media;
+  requires an explicit `confirm=true`.
+- **Broadcasts (separate opt-in):** launch a template broadcast; requires
+  `confirm=true` and is marked destructive.
 
 ## Safety
 
 Because sending WhatsApp messages is a real side effect, the server is
 **read-only until you opt in**, layered on top of the API key's own
-scopes. Give an assistant a read-only key and read-only config and it
-physically cannot send anything. See the
+scopes. Contact mutation, single-message sending, and broadcasts have
+separate gates.
+
+The MCP contact tools intentionally do **not** expose WhatsApp consent
+fields. If an external workflow must record opt-in/opt-out, use a
+separate API key with the dedicated `contacts:consent` scope and keep
+that key out of general-purpose AI agents.
+
+Remote MCP connections must use an `https://` wacrm base URL; plain
+HTTP is allowed only for localhost/loopback development. See the
 [server README](../mcp-server/README.md) for the full tool list and
 safety model.
