@@ -11,8 +11,14 @@ import {
 vi.mock('@/lib/whatsapp/encryption', () => ({
   decrypt: () => 'plain-access-token',
 }));
-vi.mock('@/lib/api/v1/contacts', () => ({
-  findOrCreateContact: vi.fn(async () => ({ id: 'c1' })),
+vi.mock('@/lib/contacts/dedupe', () => ({
+  findExistingContact: vi.fn(async () => ({
+    id: 'c1',
+    phone: '+14155550123',
+    whatsapp_opt_in: true,
+    whatsapp_opt_in_at: '2026-09-21T12:00:00.000Z',
+    whatsapp_opt_out_at: null,
+  })),
 }));
 
 // These assertions all fire in the pure validation prologue, before
@@ -183,7 +189,7 @@ function statusDb(
 describe('finalizeBroadcastStatus', () => {
   it('leaves a capped pass in "sending" while recipients are still pending', async () => {
     const writes: { update?: Record<string, unknown> } = {};
-    await finalizeBroadcastStatus(statusDb({ pending: 25 }, 1025, writes), 'b-1');
+    await finalizeBroadcastStatus(statusDb({ pending: 25 }, 1025, writes), 'acc', 'b-1');
     // No write at all — the UI keeps offering Resume.
     expect(writes.update).toBeUndefined();
   });
@@ -192,6 +198,7 @@ describe('finalizeBroadcastStatus', () => {
     const writes: { update?: Record<string, unknown> } = {};
     await finalizeBroadcastStatus(
       statusDb({ pending: 0, failed: 10 }, 10, writes),
+      'acc',
       'b-1',
     );
     expect(writes.update?.status).toBe('failed');
@@ -201,6 +208,7 @@ describe('finalizeBroadcastStatus', () => {
     const writes: { update?: Record<string, unknown> } = {};
     await finalizeBroadcastStatus(
       statusDb({ pending: 0, failed: 3 }, 10, writes),
+      'acc',
       'b-1',
     );
     // 7 people got the message; failed_count carries the other 3.
@@ -213,6 +221,7 @@ describe('finalizeBroadcastStatus', () => {
     // failed. Pre-fix this wrote 'failed' off a pass-local counter.
     await finalizeBroadcastStatus(
       statusDb({ pending: 0, failed: 200 }, 1000, writes),
+      'acc',
       'b-1',
     );
     expect(writes.update?.status).toBe('sent');
