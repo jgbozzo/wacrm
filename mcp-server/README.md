@@ -29,8 +29,8 @@ write guards:
 | `WACRM_BASE_URL`          | yes      | Your instance URL, e.g. `https://crm.example.com`              |
 | `WACRM_API_KEY`           | yes      | An API key from the dashboard                                  |
 | `WACRM_ENABLE_WRITES`     | no       | `true` to expose contact create/update tools                    |
-| `WACRM_ENABLE_MESSAGES`   | no       | `true` to expose single-message sending (also needs writes)      |
-| `WACRM_ENABLE_BROADCASTS` | no       | `true` to expose mass broadcasts (also needs writes)             |
+| `WACRM_ENABLE_MESSAGES`   | no       | `true` to expose single-message sending                           |
+| `WACRM_ENABLE_BROADCASTS` | no       | `true` to expose mass broadcasts                                  |
 
 ### Claude Desktop / Claude Code / Cursor
 
@@ -93,7 +93,7 @@ the server layers three guards:
    broadcasts are not exposed unless separately enabled. `WACRM_ENABLE_WRITES`
    enables CRM contact changes; `WACRM_ENABLE_MESSAGES` additionally enables
    single-message sends; `WACRM_ENABLE_BROADCASTS` separately enables mass
-   sends.
+   sends. These gates are independent, so enabling one does not expose the others.
 2. **API-key scopes.** Whatever the guards allow, your wacrm instance
    still enforces the key's scopes. A call without the right scope
    returns a clean `forbidden` error. Issue a read-only key for a
