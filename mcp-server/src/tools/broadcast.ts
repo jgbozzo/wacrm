@@ -37,7 +37,7 @@ export function registerBroadcastTools(server: McpServer, client: WacrmClient): 
           )
           .min(1)
           .max(1000)
-          .describe('Recipients (1–1000). Invalid numbers are dropped and counted as rejected.'),
+          .describe('Recipients (1–1000). Invalid numbers or contacts without current recorded WhatsApp opt-in are rejected before Meta is called.'),
         confirm: z
           .boolean()
           .describe('Must be true to actually send. A safety gate against accidental mass sends.'),
