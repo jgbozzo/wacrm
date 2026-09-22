@@ -486,7 +486,8 @@ export async function sendMessageToConversation(
     await db
       .from('contacts')
       .update({ phone: workingPhone })
-      .eq('id', contact.id);
+      .eq('id', contact.id)
+      .eq('account_id', accountId);
   }
 
   // Persist the sent message. Field names MUST match the messages
@@ -549,7 +550,8 @@ export async function sendMessageToConversation(
       last_message_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', conversationId);
+    .eq('id', conversationId)
+    .eq('account_id', accountId);
 
   // Pause any active Flow run for this contact — the agent stepping in
   // is the strongest "yield, human is here" signal. Best-effort.
