@@ -114,7 +114,7 @@ This version must be reviewed against Meta's current supported versions before c
 4. ✅ Add service-window enforcement in shared/manual/API and automation/flow send paths.
 5. ✅ Review all `/api/v1` endpoints for explicit account scoping.
 6. ✅ Review MCP/n8n permissions and least-privilege defaults.
-7. Review and update dependencies.
+7. ✅ Review and update dependencies.
 8. Evaluate CSP enforcement.
 9. Run typecheck, tests and production build.
 10. Open a pull request from `security-hardening` to `main` only after review.
@@ -151,3 +151,8 @@ This version must be reviewed against Meta's current supported versions before c
 - MCP remote base URLs now require HTTPS (HTTP is limited to loopback development), requests do not follow redirects while carrying API keys, and calls have a 15-second timeout.
 - MCP contact tools intentionally do not expose WhatsApp consent mutation.
 - Added `docs/N8N-AI-SECURITY.md` with separate-key profiles for read-only, responder, contact-sync, consent-capture, and broadcast workflows.
+- Completed a dependency security review; see `docs/DEPENDENCY-SECURITY-AUDIT.md`.
+- Raised the MCP SDK security floor to `^1.30.0` and the root `fast-uri` override floor to `^3.1.7`.
+- Confirmed the locked Next.js, sharp, PostCSS, Hono and fast-uri versions are above the high/critical patched baselines reviewed in this phase.
+- Added root and MCP `npm audit --audit-level=high` gates plus MCP typecheck/build to CI.
+- Deferred a routine Supabase bump because the 2.110.x line changes the Node.js support contract; no security finding requires that upgrade.
