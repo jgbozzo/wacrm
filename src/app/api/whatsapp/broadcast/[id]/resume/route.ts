@@ -105,7 +105,7 @@ export async function POST(
           err instanceof Error ? err.message : err
         );
         // Don't leave it mid-flight — settle whatever did land.
-        await finalizeBroadcastStatus(admin, id).catch(() => {});
+        await finalizeBroadcastStatus(admin, accountId, id).catch(() => {});
       } finally {
         await releaseBroadcastDelivery(admin, id);
       }
