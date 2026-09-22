@@ -14,6 +14,7 @@ export interface Config {
   baseUrl: string;
   apiKey: string;
   enableWrites: boolean;
+  enableMessages: boolean;
   enableBroadcasts: boolean;
 }
 
@@ -40,14 +41,33 @@ export function loadConfig(): Config {
 
   // Normalise: strip a trailing slash so path joins are predictable.
   const baseUrl = baseUrlRaw!.replace(/\/+$/, '');
-  if (!/^https?:\/\//.test(baseUrl)) {
+  let parsedBaseUrl: URL;
+  try {
+    parsedBaseUrl = new URL(baseUrl);
+  } catch {
+    throw new Error(`WACRM_BASE_URL must be an absolute URL (got "${baseUrl}").`);
+  }
+
+  const isLoopback =
+    parsedBaseUrl.hostname === 'localhost' ||
+    parsedBaseUrl.hostname === '127.0.0.1' ||
+    parsedBaseUrl.hostname === '[::1]';
+
+  if (parsedBaseUrl.protocol !== 'https:' && !(parsedBaseUrl.protocol === 'http:' && isLoopback)) {
     throw new Error(
-      `WACRM_BASE_URL must start with http:// or https:// (got "${baseUrl}").`,
+      'WACRM_BASE_URL must use https://. Plain http:// is allowed only for localhost/loopback development.',
     );
   }
 
   const enableWrites = truthy(process.env.WACRM_ENABLE_WRITES);
+  const enableMessages = truthy(process.env.WACRM_ENABLE_MESSAGES);
   const enableBroadcasts = truthy(process.env.WACRM_ENABLE_BROADCASTS);
+
+  if (enableMessages && !enableWrites) {
+    throw new Error(
+      'WACRM_ENABLE_MESSAGES requires WACRM_ENABLE_WRITES to also be set.',
+    );
+  }
 
   if (enableBroadcasts && !enableWrites) {
     throw new Error(
@@ -59,6 +79,7 @@ export function loadConfig(): Config {
     baseUrl,
     apiKey: apiKey!,
     enableWrites,
+    enableMessages,
     enableBroadcasts,
   };
 }
