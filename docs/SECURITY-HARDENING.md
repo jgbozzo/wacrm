@@ -112,7 +112,7 @@ This version must be reviewed against Meta's current supported versions before c
 2. ✅ Add contact-level opt-in/opt-out read/write support.
 3. ✅ Enforce consent in broadcast creation and resume paths.
 4. ✅ Add service-window enforcement in shared/manual/API and automation/flow send paths.
-5. Review all `/api/v1` endpoints for explicit account scoping.
+5. ✅ Review all `/api/v1` endpoints for explicit account scoping.
 6. Review MCP/n8n permissions and least-privilege defaults.
 7. Review and update dependencies.
 8. Evaluate CSP enforcement.
@@ -141,3 +141,7 @@ This version must be reviewed against Meta's current supported versions before c
 - Flow text/media/interactive sends and automation text/interactive sends use the same rule; AI auto-reply inherits the guard through the flow sender.
 - Templates remain allowed by the window guard so they can be used when the customer service window is closed.
 - Added unit coverage for the exact 24-hour boundary and fail-closed timestamp handling.
+- Completed an account-isolation audit of all 11 `/api/v1` route files (16 HTTP handlers); see `docs/API-TENANCY-AUDIT.md`.
+- Tightened helper writes that previously relied only on ids obtained from an account-scoped parent query.
+- Added account context to broadcast delivery/finalization guards.
+- While tracing `/api/v1/messages`, closed a separate compliance bypass: out-of-window template sends now require current explicit opt-in, including automation template sends.
