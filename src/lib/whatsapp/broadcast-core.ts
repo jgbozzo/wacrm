@@ -64,6 +64,7 @@ interface PlannedRecipient {
 }
 
 export interface BroadcastPlan {
+  accountId: string;
   broadcastId: string;
   templateName: string;
   templateLanguage: string;
@@ -249,6 +250,7 @@ export async function createBroadcast(
   );
 
   return {
+    accountId,
     broadcastId,
     templateName,
     templateLanguage: resolvedTemplate.language,
@@ -315,7 +317,8 @@ export async function deliverBroadcast(
           whatsapp_message_id: sentMessageId,
           error_message: null,
         })
-        .eq('id', recipient.recipientRowId);
+        .eq('id', recipient.recipientRowId)
+        .eq('broadcast_id', plan.broadcastId);
     } else {
       await db
         .from('broadcast_recipients')
@@ -323,11 +326,12 @@ export async function deliverBroadcast(
           status: 'failed',
           error_message: lastError || 'Unknown error',
         })
-        .eq('id', recipient.recipientRowId);
+        .eq('id', recipient.recipientRowId)
+        .eq('broadcast_id', plan.broadcastId);
     }
   }
 
-  await finalizeBroadcastStatus(db, plan.broadcastId);
+  await finalizeBroadcastStatus(db, plan.accountId, plan.broadcastId);
 }
 
 /**
@@ -345,6 +349,7 @@ export async function deliverBroadcast(
  */
 export async function finalizeBroadcastStatus(
   db: SupabaseClient,
+  accountId: string,
   broadcastId: string
 ): Promise<void> {
   const countWhere = async (status: string): Promise<number> => {
@@ -372,5 +377,6 @@ export async function finalizeBroadcastStatus(
       status: failed > 0 && failed === (total ?? 0) ? 'failed' : 'sent',
       updated_at: new Date().toISOString(),
     })
-    .eq('id', broadcastId);
+    .eq('id', broadcastId)
+    .eq('account_id', accountId);
 }
