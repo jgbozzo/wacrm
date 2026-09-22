@@ -26,6 +26,9 @@ const CONTACT = {
   id: 'contact-1',
   account_id: 'acct-1',
   phone: '+15551234567',
+  whatsapp_opt_in: true,
+  whatsapp_opt_in_at: '2026-09-21T12:00:00.000Z',
+  whatsapp_opt_out_at: null,
 }
 
 // Chainable Supabase mock. A fresh builder per `.from()` call tracks whether
