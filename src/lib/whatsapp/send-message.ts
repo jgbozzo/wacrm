@@ -47,6 +47,7 @@ import {
   templateBodyParams,
   templateContentText,
 } from '@/lib/whatsapp/template-body';
+import { getCustomerServiceWindowStatus } from '@/lib/whatsapp/service-window';
 
 export const MEDIA_KINDS = ['image', 'video', 'document', 'audio'] as const;
 export const VALID_MESSAGE_TYPES = [
@@ -233,6 +234,42 @@ export async function sendMessageToConversation(
   }
 
   const contact = conversation.contact;
+
+  // Meta permits free-form text, media and interactive replies only
+  // during the 24-hour customer service window opened/renewed by the
+  // customer's latest inbound message. Templates are the approved path
+  // outside that window.
+  //
+  // Enforce this locally BEFORE decrypting credentials or calling Meta so
+  // dashboard, public API, n8n and MCP sends all share the same guard.
+  if (messageType !== 'template') {
+    try {
+      const serviceWindow = await getCustomerServiceWindowStatus(
+        db,
+        accountId,
+        conversationId
+      );
+      if (!serviceWindow.open) {
+        throw new SendMessageError(
+          'customer_service_window_closed',
+          serviceWindow.lastInboundAt
+            ? 'The 24-hour WhatsApp customer service window is closed. Send an approved template message instead.'
+            : 'No inbound customer message was found. Send an approved template message instead of free-form content.',
+          409
+        );
+      }
+    } catch (err) {
+      if (err instanceof SendMessageError) throw err;
+      const message =
+        err instanceof Error ? err.message : 'Unknown service-window error';
+      console.error('[send-message] service-window check failed:', message);
+      throw new SendMessageError(
+        'service_window_check_failed',
+        'Could not verify the WhatsApp customer service window; free-form send blocked.',
+        500
+      );
+    }
+  }
 
   // A contact is addressable by phone number OR by business-scoped user
   // ID. Meta withholds the phone number for a customer who has adopted
