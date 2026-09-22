@@ -132,8 +132,6 @@ export async function engineSendText(
 
   await requireOpenServiceWindow(db, args.accountId, args.conversationId)
 
-  await requireOpenServiceWindow(db, args.accountId, args.conversationId)
-
   const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
     db,
     args.accountId,
@@ -242,6 +240,8 @@ export async function engineSendMedia(
     )
   }
   const sanitized = sendTarget.target
+
+  await requireOpenServiceWindow(db, args.accountId, args.conversationId)
 
   const { phoneNumberId, accessToken } = await loadAccountMetaCredentials(
     db,
