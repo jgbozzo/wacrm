@@ -63,18 +63,6 @@ export function loadConfig(): Config {
   const enableMessages = truthy(process.env.WACRM_ENABLE_MESSAGES);
   const enableBroadcasts = truthy(process.env.WACRM_ENABLE_BROADCASTS);
 
-  if (enableMessages && !enableWrites) {
-    throw new Error(
-      'WACRM_ENABLE_MESSAGES requires WACRM_ENABLE_WRITES to also be set.',
-    );
-  }
-
-  if (enableBroadcasts && !enableWrites) {
-    throw new Error(
-      'WACRM_ENABLE_BROADCASTS requires WACRM_ENABLE_WRITES to also be set.',
-    );
-  }
-
   return {
     baseUrl,
     apiKey: apiKey!,
