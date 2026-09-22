@@ -160,3 +160,10 @@ This version must be reviewed against Meta's current supported versions before c
 - Added `object-src 'none'`, `frame-src 'none'`, and an explicit worker policy for the browser Opus encoder.
 - Broadened media/connect directives only where required by existing external media URL functionality; see `docs/CSP-SECURITY.md`.
 - Deferred a routine Supabase bump because the 2.110.x line changes the Node.js support contract; no security finding requires that upgrade.
+
+
+## Verification trigger
+
+GitHub Actions was enabled on the fork on 2026-09-21. This note intentionally
+creates a fresh commit on `security-hardening` so the branch-level CI and
+migration workflows run against the complete hardening set.
