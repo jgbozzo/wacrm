@@ -160,9 +160,17 @@ Response (201):
 }
 ```
 
+Free-form `text`, media and interactive messages are accepted only
+while the 24-hour customer service window is open, measured from the
+customer's most recent inbound message. Outbound agent/bot messages do
+not renew the window. Outside it, use an approved `template` message.
+
 Domain error codes beyond the table above: `whatsapp_not_configured`
-(400), `meta_error` (502 — the request reached Meta and it rejected the
-send), `template_malformed` (500).
+(400), `customer_service_window_closed` (409 — use an approved
+template), `service_window_check_failed` (500 — the local window state
+could not be verified, so the send failed closed), `meta_error` (502 —
+the request reached Meta and it rejected the send), and
+`template_malformed` (500).
 
 ### `GET /api/v1/contacts`
 
