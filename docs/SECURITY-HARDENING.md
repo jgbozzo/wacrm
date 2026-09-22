@@ -115,16 +115,16 @@ This version must be reviewed against Meta's current supported versions before c
 5. ✅ Review all `/api/v1` endpoints for explicit account scoping.
 6. ✅ Review MCP/n8n permissions and least-privilege defaults.
 7. ✅ Review and update dependencies.
-8. Evaluate CSP enforcement.
-9. Run typecheck, tests and production build.
-10. Open a pull request from `security-hardening` to `main` only after review.
+8. ✅ Evaluate and enforce CSP in production.
+9. ✅ Run dependency audit, lint, typecheck, tests, migration replay and production builds.
+10. ✅ Review the final diff and open a verification PR. Merge to `main` remains pending explicit approval.
 
 ## Change log
 
 ### 2026-09-21
 
 - Created this hardening plan.
-- Added `supabase/migrations/041_whatsapp_consent.sql`.
+- Added `supabase/migrations/043_whatsapp_consent.sql`.
 - Existing contacts default to `whatsapp_opt_in = false`; contact existence/import never implies consent.
 - Added public API read/write support for opt-in/opt-out.
 - Opt-in requires an explicit source and receives a server-side timestamp.
@@ -139,7 +139,7 @@ This version must be reviewed against Meta's current supported versions before c
 - Added a shared 24-hour customer-service-window checker based only on the latest inbound customer message.
 - Manual/dashboard and public API non-template sends now fail closed outside the window.
 - Flow text/media/interactive sends and automation text/interactive sends use the same rule; AI auto-reply inherits the guard through the flow sender.
-- Templates remain allowed by the window guard so they can be used when the customer service window is closed.
+- Templates can be used outside the customer service window only when the contact has a current explicit WhatsApp opt-in.
 - Added unit coverage for the exact 24-hour boundary and fail-closed timestamp handling.
 - Completed an account-isolation audit of all 11 `/api/v1` route files (16 HTTP handlers); see `docs/API-TENANCY-AUDIT.md`.
 - Tightened helper writes that previously relied only on ids obtained from an account-scoped parent query.
@@ -160,10 +160,6 @@ This version must be reviewed against Meta's current supported versions before c
 - Added `object-src 'none'`, `frame-src 'none'`, and an explicit worker policy for the browser Opus encoder.
 - Broadened media/connect directives only where required by existing external media URL functionality; see `docs/CSP-SECURITY.md`.
 - Deferred a routine Supabase bump because the 2.110.x line changes the Node.js support contract; no security finding requires that upgrade.
-
-
-## Verification trigger
-
-GitHub Actions was enabled on the fork on 2026-09-21. This note intentionally
-creates a fresh commit on `security-hardening` so the branch-level CI and
-migration workflows run against the complete hardening set.
+- GitHub Actions verification passed on the hardened branch: dependency audit, lint, TypeScript, unit tests, production build, MCP audit/typecheck/build, and full Supabase migration replay all succeeded.
+- Final diff review found no unintended changes to `main`; temporary branch-only CI trigger edits were restored before merge consideration.
+- Pull request #1 remains unmerged pending explicit approval.
