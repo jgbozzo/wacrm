@@ -11,7 +11,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { WacrmClient } from '../client.js';
-import { handle, jsonResult } from './shared.js';
+import { errorResult, handle, jsonResult } from './shared.js';
 
 const templateSchema = z
   .object({
@@ -55,10 +55,28 @@ export function registerMessageTools(
           .string()
           .optional()
           .describe('Optional id of a message in the same conversation to reply to.'),
+        confirm: z
+          .boolean()
+          .describe(
+            'Must be true only after the user has explicitly approved the recipient and message content.',
+          ),
       },
-      annotations: { title: 'Send WhatsApp message', readOnlyHint: false, openWorldHint: true },
+      annotations: {
+        title: 'Send WhatsApp message',
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
     },
-    handle(async (args) => jsonResult(await client.sendMessage(args))),
+    handle(async ({ confirm, ...body }) => {
+      if (confirm !== true) {
+        return errorResult(
+          'Refusing to send: confirm must be true. Show the recipient and exact message/template to the user and obtain explicit approval first.',
+        );
+      }
+      return jsonResult(await client.sendMessage(body));
+    }),
   );
 
 
