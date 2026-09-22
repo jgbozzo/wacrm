@@ -40,10 +40,10 @@ That's **read-only** — the safe default. Side effects are split into
 separate gates:
 
 - `WACRM_ENABLE_WRITES=true` exposes contact create/update tools.
-- `WACRM_ENABLE_MESSAGES=true` additionally exposes single-message
-  sending and requires `WACRM_ENABLE_WRITES=true`.
-- `WACRM_ENABLE_BROADCASTS=true` exposes mass broadcasts and also
-  requires `WACRM_ENABLE_WRITES=true`.
+- `WACRM_ENABLE_MESSAGES=true` exposes single-message sending.
+- `WACRM_ENABLE_BROADCASTS=true` exposes mass broadcasts.
+
+These gates are independent: enabling one does not expose the other side effects.
 
 ## What it exposes
 
