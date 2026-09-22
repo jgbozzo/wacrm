@@ -10,6 +10,7 @@ import {
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { resolveContactSendTarget } from '@/lib/whatsapp/wa-identity'
+import { getCustomerServiceWindowStatus } from '@/lib/whatsapp/service-window'
 import {
   resolveTemplateRow,
   templateContentText,
@@ -138,6 +139,21 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     )
   }
   const sanitized = sendTarget.target
+
+  if (input.kind === 'text') {
+    const serviceWindow = await getCustomerServiceWindowStatus(
+      db,
+      input.accountId,
+      input.conversationId,
+    )
+    if (!serviceWindow.open) {
+      throw new Error(
+        serviceWindow.lastInboundAt
+          ? 'WhatsApp 24-hour customer service window is closed; use an approved template instead'
+          : 'No inbound customer message found; free-form WhatsApp send blocked',
+      )
+    }
+  }
 
   const { data: config, error: configErr } = await db
     .from('whatsapp_config')
