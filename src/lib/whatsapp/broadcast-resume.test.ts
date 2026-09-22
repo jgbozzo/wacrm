@@ -180,7 +180,14 @@ function recipient(
   return {
     id,
     template_params: params,
-    contact: phone ? { phone } : null,
+    contact: phone
+      ? {
+          phone,
+          whatsapp_opt_in: true,
+          whatsapp_opt_in_at: '2026-09-21T12:00:00.000Z',
+          whatsapp_opt_out_at: null,
+        }
+      : null,
   };
 }
 
