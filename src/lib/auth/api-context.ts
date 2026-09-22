@@ -79,7 +79,7 @@ function extractKey(request: Request): string | null {
  */
 export async function requireApiKey(
   request: Request,
-  scope?: ApiScope
+  scope?: ApiScope | readonly ApiScope[]
 ): Promise<ApiKeyContext> {
   const presented = extractKey(request);
   if (!presented || !looksLikeApiKey(presented)) {
@@ -101,8 +101,15 @@ export async function requireApiKey(
     throw rateLimited(limit);
   }
 
-  if (scope && !hasScope(row.scopes, scope)) {
-    throw forbidden(`This API key is missing the '${scope}' scope`);
+  if (scope) {
+    const required = Array.isArray(scope) ? scope : [scope];
+    if (!required.some((candidate) => hasScope(row.scopes, candidate))) {
+      throw forbidden(
+        required.length === 1
+          ? `This API key is missing the '${required[0]}' scope`
+          : `This API key needs at least one of these scopes: ${required.join(', ')}`
+      );
+    }
   }
 
   touchLastUsed(row.id);
