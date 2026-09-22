@@ -111,7 +111,7 @@ This version must be reviewed against Meta's current supported versions before c
 1. ✅ Add consent fields in a new Supabase migration.
 2. ✅ Add contact-level opt-in/opt-out read/write support.
 3. ✅ Enforce consent in broadcast creation and resume paths.
-4. Add service-window enforcement in the shared send core.
+4. ✅ Add service-window enforcement in shared/manual/API and automation/flow send paths.
 5. Review all `/api/v1` endpoints for explicit account scoping.
 6. Review MCP/n8n permissions and least-privilege defaults.
 7. Review and update dependencies.
@@ -136,4 +136,8 @@ This version must be reviewed against Meta's current supported versions before c
 - Resume/retry re-checks consent so a later opt-out cannot be bypassed.
 - Public API responses now distinguish invalid-number rejections from missing/withdrawn-consent rejections.
 - Added unit coverage for consent validation.
-- Service-window enforcement for non-template sends is still pending.
+- Added a shared 24-hour customer-service-window checker based only on the latest inbound customer message.
+- Manual/dashboard and public API non-template sends now fail closed outside the window.
+- Flow text/media/interactive sends and automation text/interactive sends use the same rule; AI auto-reply inherits the guard through the flow sender.
+- Templates remain allowed by the window guard so they can be used when the customer service window is closed.
+- Added unit coverage for the exact 24-hour boundary and fail-closed timestamp handling.
