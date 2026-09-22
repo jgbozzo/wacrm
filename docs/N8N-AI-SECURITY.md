@@ -104,9 +104,9 @@ workflows that the agent cannot call directly.
 For MCP, wacrm adds additional process-level gates:
 
 - contact writes require `WACRM_ENABLE_WRITES=true`;
-- single-message sending additionally requires
-  `WACRM_ENABLE_MESSAGES=true`;
+- single-message sending requires `WACRM_ENABLE_MESSAGES=true`;
 - broadcasts require `WACRM_ENABLE_BROADCASTS=true`;
+- these three process-level gates are independent;
 - message and broadcast tools require `confirm=true`;
 - MCP contact tools do not expose opt-in/opt-out mutation.
 
