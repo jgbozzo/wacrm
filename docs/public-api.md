@@ -47,7 +47,9 @@ it. Grant the minimum.
 | `messages:read`      | Read messages and delivery status        |
 | `contacts:read`      | List and read contacts                   |
 | `contacts:write`     | Create and update contacts               |
+| `contacts:consent`   | Record WhatsApp opt-in / opt-out         |
 | `conversations:read` | List and read conversations              |
+| `broadcasts:read`    | Read broadcast campaign status           |
 | `broadcasts:send`    | Launch broadcast campaigns               |
 | `webhooks:manage`    | Register and manage outbound webhooks    |
 
@@ -206,8 +208,10 @@ match returns `200` with the existing contact; a new contact returns
 `201`. The response body is the serialized contact (same shape as the
 list rows above).
 
-Contact creation **does not imply WhatsApp consent**. New and existing
-contacts remain opted out unless the request explicitly contains
+Contact creation **does not imply WhatsApp consent**. Reading/writing normal
+contact fields uses `contacts:write`, while recording consent additionally
+requires the dedicated `contacts:consent` scope. New and existing contacts
+remain opted out unless the request explicitly contains
 `"whatsapp_opt_in": true`. An opt-in also requires a non-empty
 `whatsapp_opt_in_source`; optional `whatsapp_opt_in_evidence` can hold
 a form submission id, source URL, signed-form note, or equivalent
@@ -233,7 +237,8 @@ Read or update one contact. Scopes: `contacts:read` / `contacts:write`.
 pass `tags` (an array of tag names) to replace the contact's tags. A
 contact in another account returns `404`.
 
-Consent can be changed through the same endpoint:
+Consent can be changed through the same endpoint only when the API key also
+has `contacts:consent`:
 
 - `whatsapp_opt_in: true` requires `whatsapp_opt_in_source` and records
   a new server-side opt-in timestamp. `whatsapp_opt_in_evidence` is
@@ -314,7 +319,8 @@ missing/withdrawn consent are rejected before any Meta call. Response
 
 ### `GET /api/v1/broadcasts/{id}`
 
-Broadcast status + counts. Scope: `broadcasts:send`. `status` moves
+Broadcast status + counts. Scope: `broadcasts:read` (legacy keys with
+`broadcasts:send` are also accepted). `status` moves
 `sending` → `sent`; `delivered_count` / `read_count` keep climbing as
 Meta delivery webhooks arrive. `404` for another account's broadcast.
 
