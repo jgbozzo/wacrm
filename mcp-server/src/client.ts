@@ -64,6 +64,12 @@ export class WacrmClient {
         method,
         headers,
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+        // Never follow redirects while carrying an API key. The configured
+        // wacrm origin must answer directly; a redirect is treated as a
+        // configuration/network failure rather than risking credential
+        // forwarding to an unexpected destination.
+        redirect: 'error',
+        signal: AbortSignal.timeout(15_000),
       });
     } catch (err) {
       throw new WacrmApiError(
