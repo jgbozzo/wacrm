@@ -23,6 +23,9 @@ export interface ExistingContact {
   id: string;
   phone: string;
   name?: string | null;
+  whatsapp_opt_in?: boolean | null;
+  whatsapp_opt_in_at?: string | null;
+  whatsapp_opt_out_at?: string | null;
   [key: string]: unknown;
 }
 
