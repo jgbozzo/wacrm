@@ -13,6 +13,7 @@
 // ============================================================
 
 import { requireApiKey } from '@/lib/auth/api-context';
+import { hasScope } from '@/lib/api-keys/scopes';
 import { ok, okList, fail, toApiErrorResponse } from '@/lib/api/v1/respond';
 import {
   parseListParams,
@@ -119,6 +120,13 @@ export async function POST(request: Request) {
     // Parse before creating anything so malformed consent input cannot
     // leave an otherwise-valid contact behind.
     const consent = parseWhatsAppConsentInput(body);
+    if (consent && !hasScope(ctx.scopes, 'contacts:consent')) {
+      return fail(
+        'forbidden',
+        "This API key is missing the 'contacts:consent' scope",
+        403
+      );
+    }
 
     const auditUserId = await resolveAuditUserId(ctx.supabase, ctx.accountId);
 
